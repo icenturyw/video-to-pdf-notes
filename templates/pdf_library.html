@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}PDF 库{% endblock %}
+{% block content %}
+<section class="card task-board">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Library</span>
+      <h1>已生成 PDF</h1>
+      <p class="muted">集中查看全部已生成讲义，支持排序和快速跳转到任务详情。</p>
+    </div>
+    <div class="toolbar-group">
+      <form method="get" class="sort-form">
+        <label>排序
+          <select name="sort" onchange="this.form.submit()">
+            {% for sort_value, sort_meta in sort_options.items() %}
+            <option value="{{ sort_value }}" {% if sort_key == sort_value %}selected{% endif %}>{{ sort_meta[1] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+      <a class="button-link secondary" href="{{ url_for('main.dashboard') }}">返回任务页</a>
+    </div>
+  </div>
+
+  {% if generated_pdfs %}
+  <div class="pdf-grid">
+    {% for job in generated_pdfs %}
+    <article class="pdf-card">
+      <div class="pdf-card-head">
+        <div>
+          <h3>{{ preferred_job_name(job) }}</h3>
+          <p class="muted">{{ pdf_display_name(job) }}</p>
+        </div>
+        <span class="platform-pill">{{ job.platform }}</span>
+      </div>
+      <dl class="pdf-meta">
+        <div><dt>任务编号</dt><dd>#{{ job.id }}</dd></div>
+        <div><dt>模式</dt><dd>{{ output_modes.get(job.output_mode, {}).get('label', job.output_mode) }}</dd></div>
+        <div><dt>创建时间</dt><dd>{{ job.created_at }}</dd></div>
+        <div><dt>来源</dt><dd class="break-all">{{ job.uploaded_video_path.split('/')[-1] if job.source_kind == 'upload' else job.source_url }}</dd></div>
+      </dl>
+      <div class="pdf-actions">
+        <a class="button-link" href="{{ url_for('main.job_pdf', job_id=job.id) }}" target="_blank">浏览器查看 PDF</a>
+        <a class="button-link secondary" href="{{ url_for('main.job_detail', job_id=job.id) }}">查看任务</a>
+        {% if job.notes_html_path %}
+        <a class="button-link secondary" href="{{ url_for('main.job_html', job_id=job.id) }}" target="_blank">查看 HTML</a>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <h3>还没有可用 PDF</h3>
+    <p class="muted">完成至少一个任务后，这里会集中展示全部结果。</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}用户配置{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>模型与系统配置</h1>
+  <p>这里保存当前用户的 OpenAI 兼容接口设置。`API Key` 会加密后写入本地 SQLite。</p>
+  <form method="post" class="form-grid">
+    <label>API Base URL
+      <input type="url" name="api_base_url" value="{{ settings.api_base_url if settings else '' }}" placeholder="https://api.openai.com/v1">
+    </label>
+    <label>模型名
+      <input type="text" name="model_name" value="{{ settings.model_name if settings else '' }}" placeholder="gpt-4.1-mini">
+    </label>
+    <label>API Key
+      <input type="password" name="api_key" placeholder="{{ masked_key or 'sk-...' }}">
+    </label>
+    <label>系统提示词
+      <textarea name="system_prompt" rows="12" placeholder="留空则使用内置课程讲义提示词">{{ settings.system_prompt if settings else '' }}</textarea>
+    </label>
+    <button type="submit">保存配置</button>
+  </form>
+  <hr class="divider">
+  <div class="tool-row">
+    <div>
+      <h2>Groq 转写自检</h2>
+      <p class="muted">使用当前服务内置的 `GROQ_API_KEY` 和 `whisper-large-v3-turbo`，生成 1 秒静音音频并调用官方转写接口。</p>
+    </div>
+    <button type="button" id="groq-test-button">开始自检</button>
+  </div>
+  <div id="groq-test-result" class="flash hidden"></div>
+</section>
+<script>
+(() => {
+  const button = document.getElementById("groq-test-button");
+  const result = document.getElementById("groq-test-result");
+
+  async function runTest() {
+    button.disabled = true;
+    button.textContent = "检测中...";
+    result.className = "flash";
+    result.textContent = "正在调用 Groq 转写接口...";
+    try {
+      const response = await fetch("{{ url_for('main.settings_test_groq') }}", {
+        method: "POST",
+        headers: { "Accept": "application/json" }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        result.className = "flash flash-error";
+        result.textContent = data.message || "Groq 自检失败";
+        return;
+      }
+      const parts = [data.message, `模型：${data.model}`];
+      if (data.request_id) parts.push(`Request ID：${data.request_id}`);
+      parts.push(`返回文本：${data.text || "空字符串"}`);
+      result.className = "flash flash-success";
+      result.textContent = parts.join("\n");
+    } catch (error) {
+      result.className = "flash flash-error";
+      result.textContent = "Groq 自检失败：" + error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "开始自检";
+    }
+  }
+
+  button.addEventListener("click", () => {
+    runTest();
+  });
+})();
+</script>
+{% endblock %}

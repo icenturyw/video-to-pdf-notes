@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}{{ preferred_job_name(job) }}{% endblock %}
+{% block content %}
+<section class="card detail-hero">
+  <div class="section-head">
+    <div class="title-stack">
+      <span class="eyebrow">Job Detail</span>
+      <h1 id="job-title">{{ preferred_job_name(job) }}</h1>
+      <p class="muted clamp-text" id="job-subtitle">{{ job.source_kind == 'upload' and (job.uploaded_video_path.split('/')[-1] if job.uploaded_video_path else '本地视频文件') or (job.title or job.source_url) }}</p>
+    </div>
+    <div class="live-state">
+      <span class="live-indicator {% if job.status not in ['completed', 'completed_with_warnings', 'failed', 'cancelled'] %}is-live{% endif %}" id="live-indicator"></span>
+      <span class="status status-{{ job.status }}" id="job-status">{{ job.status }}</span>
+    </div>
+  </div>
+  <dl class="detail-grid">
+    <div class="detail-card"><dt>平台</dt><dd><span class="platform-pill">{{ job.platform }}</span></dd></div>
+    <div class="detail-card"><dt>来源类型</dt><dd>{{ '上传文件' if job.source_kind == 'upload' else '链接抓取' }}</dd></div>
+    <div class="detail-card"><dt>输出模式</dt><dd>{{ job.output_mode }}</dd></div>
+    <div class="detail-card"><dt>创建时间</dt><dd>{{ job.created_at }}</dd></div>
+    <div class="detail-card"><dt>当前阶段</dt><dd id="job-stage">{{ job.processing_stage or 'waiting' }}</dd></div>
+    <div class="detail-card detail-span-2">
+      <dt>任务名称</dt>
+      <dd>
+        <div>{{ preferred_job_name(job) }}</div>
+        <form method="post" action="{{ url_for('main.job_rename', job_id=job.id) }}" class="inline-rename-form">
+          <input type="text" name="task_name" value="{{ preferred_job_name(job) }}" maxlength="120" required>
+          <button type="submit" class="button-link secondary">重命名并同步 PDF 文件名</button>
+        </form>
+      </dd>
+    </div>
+    <div class="detail-card detail-span-2"><dt>来源</dt><dd>{% if job.source_kind == 'upload' %}<span class="source-link break-all">{{ job.uploaded_video_path }}</span>{% else %}<a class="source-link break-all" href="{{ job.source_url }}" target="_blank" rel="noreferrer">{{ job.source_url }}</a>{% endif %}</dd></div>
+    <div class="detail-card detail-span-2"><dt>工作目录</dt><dd class="mono break-all">{{ job.work_dir }}</dd></div>
+  </dl>
+  <div id="error-box" class="flash flash-error {% if not job.error_message %}hidden{% endif %}">{{ job.error_message }}</div>
+  <div id="warning-box" class="flash flash-warning {% if not job.warning_message %}hidden{% endif %}">{{ job.warning_message }}</div>
+  <div class="actions" id="job-actions">
+    {% if job.notes_pdf_path %}
+    <a class="button-link" data-role="pdf-link" href="{{ url_for('main.job_pdf', job_id=job.id) }}" target="_blank">浏览器查看 PDF</a>
+    {% else %}
+    <a class="button-link hidden" data-role="pdf-link" href="#" target="_blank">浏览器查看 PDF</a>
+    {% endif %}
+    {% if job.notes_html_path %}
+    <a class="button-link secondary" data-role="html-link" href="{{ url_for('main.job_html', job_id=job.id) }}" target="_blank">查看 HTML 讲义</a>
+    {% else %}
+    <a class="button-link secondary hidden" data-role="html-link" href="#" target="_blank">查看 HTML 讲义</a>
+    {% endif %}
+    <form method="post" action="{{ url_for('main.job_rerun_reuse', job_id=job.id) }}">
+      <button type="submit" class="button-link secondary">复用重生成</button>
+    </form>
+    <form method="post" action="{{ url_for('main.job_rerun_full', job_id=job.id) }}">
+      <button type="submit" class="button-link secondary">完整重跑</button>
+    </form>
+    <form method="post" action="{{ url_for('main.job_delete', job_id=job.id) }}" onsubmit="return confirm('确认删除这个任务及其产物文件？');">
+      <button type="submit" class="button-link danger">删除任务</button>
+    </form>
+    {% if job.status in ['queued', 'running'] %}
+    <form method="post" action="{{ url_for('main.job_cancel', job_id=job.id) }}">
+      <button type="submit" class="button-link warning">取消任务</button>
+    </form>
+    {% endif %}
+    <a class="button-link secondary" href="{{ url_for('main.dashboard') }}">返回任务列表</a>
+  </div>
+</section>
+
+<section class="card log-card">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Trace</span>
+      <h2>任务日志</h2>
+    </div>
+  </div>
+  <pre class="log-box" id="job-log">{{ job.log_text or '暂无日志' }}</pre>
+</section>
+<script>
+(() => {
+  const statusEl = document.getElementById("job-status");
+  const subtitleEl = document.getElementById("job-subtitle");
+  const errorEl = document.getElementById("error-box");
+  const warningEl = document.getElementById("warning-box");
+  const logEl = document.getElementById("job-log");
+  const liveEl = document.getElementById("live-indicator");
+  const stageEl = document.getElementById("job-stage");
+  const pdfLink = document.querySelector('[data-role="pdf-link"]');
+  const htmlLink = document.querySelector('[data-role="html-link"]');
+  const pollUrl = "{{ url_for('main.job_status', job_id=job.id) }}";
+  const terminalStates = new Set(["completed", "completed_with_warnings", "failed", "cancelled"]);
+  let timer = null;
+
+  function setVisibility(el, visible) {
+    el.classList.toggle("hidden", !visible);
+  }
+
+  function updateStatusClass(status) {
+    statusEl.className = `status status-${status}`;
+    liveEl.classList.toggle("is-live", !terminalStates.has(status));
+  }
+
+  function updateFlash(el, text) {
+    el.textContent = text || "";
+    setVisibility(el, Boolean(text));
+  }
+
+  function updateLink(el, href, visible) {
+    el.href = href || "#";
+    setVisibility(el, visible);
+  }
+
+  async function refreshJob() {
+    const response = await fetch(pollUrl, {headers: {"Accept": "application/json"}});
+    if (!response.ok) return;
+    const data = await response.json();
+    updateStatusClass(data.status);
+    statusEl.textContent = data.status;
+    stageEl.textContent = data.processing_stage || "waiting";
+    if (data.title) {
+      subtitleEl.textContent = data.title;
+    }
+    updateFlash(errorEl, data.error_message);
+    updateFlash(warningEl, data.warning_message);
+    logEl.textContent = data.log_text || "暂无日志";
+    logEl.scrollTop = logEl.scrollHeight;
+    updateLink(pdfLink, data.pdf_url, data.pdf_ready);
+    updateLink(htmlLink, data.html_url, data.html_ready);
+    if (data.terminal && timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  if (!terminalStates.has(statusEl.textContent.trim())) {
+    timer = setInterval(() => {
+      refreshJob().catch(() => {});
+    }, 2500);
+    refreshJob().catch(() => {});
+  }
+})();
+</script>
+{% endblock %}

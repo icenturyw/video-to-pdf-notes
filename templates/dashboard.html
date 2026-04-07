@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}任务面板{% endblock %}
+{% block content %}
+<section class="hero card">
+  <div class="hero-copy">
+    <span class="eyebrow">Task Pipeline</span>
+    <h1>创建转换任务</h1>
+    <p>支持粘贴 YouTube / Bilibili 链接，或直接上传视频文件。后台会拉取元数据、字幕或语音转写，并生成可在浏览器预览的 PDF。</p>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="form-grid hero-form">
+    <label>任务名称
+      <input type="text" name="task_name" placeholder="例如：软考 p14 数据库规范化">
+    </label>
+    <label>视频链接
+      <input type="url" name="source_url" placeholder="https://www.youtube.com/watch?v=...">
+    </label>
+    <label>上传视频文件
+      <input type="file" name="video_file" accept="video/*,.mp4,.mkv,.mov,.avi,.webm,.m4v">
+    </label>
+    <label>平台
+      <select name="platform">
+        <option value="youtube">YouTube</option>
+        <option value="bilibili">Bilibili</option>
+      </select>
+    </label>
+    <label>输出模式
+      <select name="output_mode">
+        {% for mode_key, mode in output_modes.items() %}
+        <option value="{{ mode_key }}" {% if mode_key == 'full_notes' %}selected{% endif %}>{{ mode.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">开始转换</button>
+  </form>
+</section>
+
+<section class="card task-board">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Queue</span>
+      <h2>我的任务</h2>
+    </div>
+    <div class="toolbar-group">
+      <form method="get" class="sort-form">
+        <label>排序
+          <select name="sort" onchange="this.form.submit()">
+            {% for sort_value, sort_meta in sort_options.items() %}
+            <option value="{{ sort_value }}" {% if sort_key == sort_value %}selected{% endif %}>{{ sort_meta[1] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+      <a class="button-link secondary" href="{{ url_for('main.pdf_library') }}">查看全部 PDF</a>
+      <a class="ghost-link" href="{{ url_for('main.settings') }}">配置模型 API</a>
+    </div>
+  </div>
+  {% if jobs %}
+  <div class="jobs-table-wrap">
+    <table class="jobs-table">
+      <thead>
+        <tr>
+          <th>任务</th>
+          <th>平台</th>
+          <th>状态</th>
+          <th>来源</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in jobs %}
+        <tr>
+          <td class="job-main-cell">
+            <div class="job-main">
+              <span class="job-id">#{{ job.id }}</span>
+              <div class="job-main-text">
+                <div class="job-title">{{ preferred_job_name(job) }}</div>
+                <div class="job-subline">
+                  {% if job.source_kind == 'upload' %}
+                  上传文件：{{ job.uploaded_video_path.split('/')[-1] if job.uploaded_video_path else '未识别文件' }}
+                  {% else %}
+                  {{ job.source_url }}
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="platform-pill">{{ job.platform }}</span>
+            <div class="cell-meta">{{ '上传文件' if job.source_kind == 'upload' else '链接任务' }}</div>
+          </td>
+          <td>
+            <span class="status status-{{ job.status }}">{{ job.status }}</span>
+            <div class="cell-meta">{{ output_modes.get(job.output_mode, {}).get('label', job.output_mode) }}</div>
+          </td>
+          <td class="source-cell">
+            {% if job.source_kind == 'upload' %}
+            <span class="source-link">{{ job.uploaded_video_path.split('/')[-1] if job.uploaded_video_path else '本地视频文件' }}</span>
+            {% else %}
+            <a class="source-link" href="{{ job.source_url }}" target="_blank" rel="noreferrer">{{ job.source_url }}</a>
+            {% endif %}
+          </td>
+          <td class="time-cell">{{ job.created_at }}</td>
+          <td class="table-actions">
+            <a class="ghost-link" href="{{ url_for('main.job_detail', job_id=job.id) }}">查看</a>
+            <form method="post" action="{{ url_for('main.job_rerun_reuse', job_id=job.id) }}">
+              <button type="submit" class="link-button">复用重生成</button>
+            </form>
+            <form method="post" action="{{ url_for('main.job_rerun_full', job_id=job.id) }}">
+              <button type="submit" class="link-button">完整重跑</button>
+            </form>
+            <form method="post" action="{{ url_for('main.job_delete', job_id=job.id) }}" onsubmit="return confirm('确认删除这个任务及其产物文件？');">
+              <button type="submit" class="link-button danger">删除</button>
+            </form>
+            {% if job.status in ['queued', 'running'] %}
+            <form method="post" action="{{ url_for('main.job_cancel', job_id=job.id) }}">
+              <button type="submit" class="link-button warning">取消</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <h3>还没有任务</h3>
+    <p class="muted">从上方输入链接创建第一条转换任务。</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

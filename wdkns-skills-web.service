@@ -1,0 +1,20 @@
+[Unit]
+Description=wdkns-skills Web Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/wdkns-skills-web
+EnvironmentFile=-/etc/default/video-to-pdf-notes
+Environment=APP_SECRET_KEY=replace-this-in-production
+Environment=APP_HOST=0.0.0.0
+Environment=APP_PORT=8765
+Environment=APP_DEBUG=false
+Environment=GROQ_TRANSCRIBE_MODEL=whisper-large-v3-turbo
+ExecStart=/root/wdkns-skills-web/start.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

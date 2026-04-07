@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}wdkns-skills Web{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  </head>
+  <body>
+    <div class="page-glow page-glow-a"></div>
+    <div class="page-glow page-glow-b"></div>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <span class="brand-chip">Server Workspace</span>
+          <a class="brand" href="{{ url_for('main.dashboard') if auth_user else url_for('main.login') }}">wdkns-skills Web</a>
+          <p class="tagline">视频链接转结构化讲义与 PDF</p>
+        </div>
+        {% if auth_user %}
+        <nav class="nav">
+          <a href="{{ url_for('main.dashboard') }}">任务</a>
+          <a href="{{ url_for('main.pdf_library') }}">PDF 库</a>
+          <a href="{{ url_for('main.settings') }}">用户配置</a>
+          <a href="{{ url_for('main.logout') }}">退出</a>
+        </nav>
+        {% endif %}
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="flash-stack">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <main class="content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </body>
+</html>
